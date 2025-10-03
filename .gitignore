@@ -1,0 +1,13 @@
+# n8n runtime data
+*/n8n_data/
+*.sqlite
+*.db
+*.log
+*.journal
+
+# Node / 系統雜項
+node_modules/
+dist/
+.DS_Store
+Thumbs.db
+.vscode/

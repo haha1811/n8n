@@ -1,0 +1,15 @@
+services:
+  n8n:
+    image: n8nio/n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Asia/Taipei
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=your-password
+      - N8N_USER_MANAGEMENT_DISABLED=true # 關閉內建帳號系統
+      - N8N_SECURE_COOKIE=false # 非 HTTPS 本機測試建議加上，避免登入回圈
+    volumes:
+      - ./n8n_data:/home/node/.n8n
