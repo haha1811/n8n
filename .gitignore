@@ -77,3 +77,7 @@ docker-compose.local.yml
 *.tmp
 *~
 *.swp
+
+# n8n workflow download / export 資料不上傳
+2025-08/n8n_Download/*
+!2025-08/n8n_Download/.gitkeep
