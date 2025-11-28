@@ -1,0 +1,2 @@
+# 不會被 commit 上去 Github.
+.env

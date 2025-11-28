@@ -1,13 +1,79 @@
-# n8n runtime data
-*/n8n_data/
+############################################################
+# 🟦 n8n Repo 全域 .gitignore
+# 提供 2025-08 / 2025-10 / 未來各版本子資料夾安全保護
+############################################################
+
+###############
+# n8n Runtime #
+###############
+
+# n8n workflows / credentials / 內部 SQLite DB
+**/n8n_data/*
+!**/n8n_data/.gitkeep
+
+# n8n SQLite 資料庫（避免 n8n 安裝時自動產生）
 *.sqlite
 *.db
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# n8n logs
 *.log
 *.journal
 
-# Node / 系統雜項
+###################
+# Container Volumes
+###################
+
+# ngrok 設定（避免 authtoken 洩漏）
+**/ngrok_config/*
+!**/ngrok_config/.gitkeep
+
+# ubuntu-cli 工作目錄資料（過於個人、免上版控）
+**/ubuntu_demo/*
+!**/ubuntu_demo/.gitkeep
+
+################
+# Environment Files
+################
+
+# 所有層級的 .env 都忽略
+**/.env
+**/*.env
+.env.local
+.env.*
+
+#################
+# Node / system junk
+#################
+
 node_modules/
 dist/
+build/
+.cache/
+
+# macOS / Windows 殘留檔
 .DS_Store
 Thumbs.db
+
+# VSCode 個人設定
 .vscode/
+.idea/
+
+###############
+# Docker files
+###############
+
+# 偶爾 docker-compose 建置會產生 temp
+docker-compose.override.yml
+docker-compose.local.yml
+
+#################
+# Backup / temp files
+#################
+
+*.bak
+*.tmp
+*~
+*.swp

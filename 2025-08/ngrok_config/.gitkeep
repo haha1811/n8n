@@ -1,0 +1,2 @@
+# This folder stores ngrok runtime configuration files.
+# The actual ngrok.yml (which contains the authtoken) must NOT be committed.

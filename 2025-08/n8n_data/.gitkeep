@@ -1,0 +1,3 @@
+# This folder stores n8n workflow, credentials, and internal database files at runtime.
+# Do NOT commit database.sqlite, credentials, or workflow data.
+# Only keep this folder structure for development.

@@ -9,7 +9,37 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=your-password
-      - N8N_USER_MANAGEMENT_DISABLED=true # 關閉內建帳號系統
-      - N8N_SECURE_COOKIE=false # 非 HTTPS 本機測試建議加上，避免登入回圈
+      - N8N_USER_MANAGEMENT_DISABLED=true
+      - N8N_SECURE_COOKIE=false
+
+      # 👇 外部 URL 相關參數
+      - N8N_PORT=5678
+      - WEBHOOK_URL=https://sparkly-knickknacky-ivory.ngrok-free.dev/
+      - N8N_HOST=sparkly-knickknacky-ivory.ngrok-free.dev
+      - N8N_PROTOCOL=https
+      - N8N_SECURE_COOKIE=true
+
     volumes:
       - ./n8n_data:/home/node/.n8n
+
+  ubuntu:
+    build: ./ubuntu-cli # 👈 用你剛剛的 Dockerfile
+    container_name: my-ubuntu-cli
+    depends_on:
+      - n8n # n8n 先起
+    environment:
+      # 放在 .env 也可以：NGROK_AUTHTOKEN=...
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    volumes:
+      # 工作資料匣：容器內 /home/ubuntu/demo 對應到本機
+      - ./ubuntu_demo:/root/demo
+      # ngrok 設定檔也持久化（下一次不用重設 authtoken）
+      - ./ngrok_config:/root/.config/ngrok
+#  ollama:
+#    image: ollama/ollama:latest
+#    container_name: ollama
+#    restart: always
+#    ports:
+#      - "11434:11434" # Web & API port
+#    volumes:
+#      - ./ollama_data:/root/.ollam_
