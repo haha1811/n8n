@@ -78,6 +78,7 @@ docker-compose.local.yml
 *~
 *.swp
 
-# n8n workflow download / export 資料不上傳
-2025-08/n8n_Download/*
-!2025-08/n8n_Download/.gitkeep
+# 忽略所有月份資料夾內 workflow JSON
+**/n8n_Download/*
+!**/n8n_Download/.gitkeep
+
