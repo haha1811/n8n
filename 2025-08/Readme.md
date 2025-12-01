@@ -232,3 +232,10 @@ graph TD
 ```
 
 ---
+
+## 2025-12-02
+
+- n8n Token to Cedentials.
+- n8n version 1.118.2 to 1.121.3 update.
+
+---
