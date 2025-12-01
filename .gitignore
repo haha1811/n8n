@@ -82,3 +82,6 @@ docker-compose.local.yml
 **/n8n_Download/*
 !**/n8n_Download/.gitkeep
 
+# 忽略所有月份資料夾內 backup ZIP
+**/n8n_backup/*
+!**/n8n_backup/.gitkeep
