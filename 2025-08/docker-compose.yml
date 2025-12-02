@@ -6,40 +6,69 @@ services:
       - "5678:5678"
     environment:
       - GENERIC_TIMEZONE=Asia/Taipei
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=your-password
-      - N8N_USER_MANAGEMENT_DISABLED=true
-      - N8N_SECURE_COOKIE=false
 
-      # 👇 外部 URL 相關參數
+      # Basic Auth（建議放到 .env）
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_USER_MANAGEMENT_DISABLED=true
+
+      # Cookie 設定（只有一個就好）
+      - N8N_SECURE_COOKIE=true
+
+      # 外部 URL 相關參數
       - N8N_PORT=5678
-      - WEBHOOK_URL=https://sparkly-knickknacky-ivory.ngrok-free.dev/
       - N8N_HOST=sparkly-knickknacky-ivory.ngrok-free.dev
       - N8N_PROTOCOL=https
-      - N8N_SECURE_COOKIE=true
+      - WEBHOOK_URL=https://sparkly-knickknacky-ivory.ngrok-free.dev/
+
+      # 👉 讓 n8n 用 Postgres 當主資料庫（可選）
+      #- DB_TYPE=postgresdb
+      #- DB_POSTGRESDB_HOST=db
+      #- DB_POSTGRESDB_PORT=5432
+      #- DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      #- DB_POSTGRESDB_USER=${POSTGRES_USER}
+      #- DB_POSTGRESDB_PASSWORD=${POSTGRES_PW}
 
     volumes:
       - ./n8n_data:/home/node/.n8n
+    depends_on:
+      - db
 
   ubuntu:
-    build: ./ubuntu-cli # 👈 用你剛剛的 Dockerfile
+    build: ./ubuntu-cli
     container_name: my-ubuntu-cli
     depends_on:
-      - n8n # n8n 先起
+      - n8n
     environment:
-      # 放在 .env 也可以：NGROK_AUTHTOKEN=...
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     volumes:
-      # 工作資料匣：容器內 /home/ubuntu/demo 對應到本機
       - ./ubuntu_demo:/root/demo
-      # ngrok 設定檔也持久化（下一次不用重設 authtoken）
       - ./ngrok_config:/root/.config/ngrok
-#  ollama:
-#    image: ollama/ollama:latest
-#    container_name: ollama
-#    restart: always
-#    ports:
-#      - "11434:11434" # Web & API port
-#    volumes:
-#      - ./ollama_data:/root/.ollam_
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+
+  db:
+    image: postgres:16
+    container_name: postgres
+    restart: always
+    shm_size: "128mb"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PW}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # 如果只給 n8n 用，可以把下面這段 ports 拿掉，安全一點
+    ports:
+      - "15432:5432"
+
+volumes:
+  postgres_data:

@@ -85,3 +85,7 @@ docker-compose.local.yml
 # 忽略所有月份資料夾內 backup ZIP
 **/n8n_backup/*
 !**/n8n_backup/.gitkeep
+
+# 忽略所有月份資料夾內 Ollama Data
+**/ollama_data/*
+!**/ollama_data/.gitkeep
