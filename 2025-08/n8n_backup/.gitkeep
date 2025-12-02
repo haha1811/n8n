@@ -1,0 +1,2 @@
+## n8n 升級前備份（推薦）
+Compress-Archive -Path .\n8n_data -DestinationPath .\n8n_backup\backup_n8n_data_$(Get-Date -Format "20251202").zip
