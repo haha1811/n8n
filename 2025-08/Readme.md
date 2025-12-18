@@ -244,3 +244,100 @@ graph TD
 ### add postgreSQL & UI (adminer)
 
 ---
+
+# n8n 練習環境安全強化實作
+
+## 使用 ngrok Traffic Policy + Google SSO（UI 邊界驗證）
+
+---
+
+## 📌 實作目標
+
+本次練習目標為：
+
+- 使用 **ngrok Traffic Policy**
+- 在 **不改動 n8n 本體程式** 的情況下
+- 於「邊界層（Edge）」加上 **Google SSO 驗證**
+- 達成：
+  - ✅ n8n UI 需先通過 Google 登入
+  - ✅ Webhook 不受 OAuth 影響（後續可再補 API 驗證）
+
+---
+
+## 🧱 架構概念
+
+```
+Internet
+  ↓
+ngrok (Google SSO)
+  ↓
+n8n
+```
+
+### 🔐 Traffic Policy（只保護 UI）
+
+`ubuntu_demo/n8n-ui-oauth.yml`
+
+```yaml=
+on_http_request:
+  - name: "Protect n8n UI with OAuth (exclude webhooks)"
+    expressions:
+      - "!req.url.path.startsWith('/webhook')"
+      - "!req.url.path.startsWith('/webhook-test')"
+    actions:
+      - type: oauth
+        config:
+          provider: google
+```
+
+:::info
+說明：
+
+- UI（/）→ 需 Google SSO
+- `/webhook*` → 不走 OAuth（避免外部系統被擋）
+  :::
+
+### ▶️ ngrok 啟動腳本
+
+`ubuntu-cli/start.sh` **（重點節錄）**
+
+```bash
+NGROK_DOMAIN="${NGROK_DOMAIN:-sparkly-knickknacky-ivory.ngrok-free.dev}"
+POLICY_FILE="${POLICY_FILE:-/root/demo/n8n-ui-oauth.yml}"
+
+ngrok http "$TARGET_URL" \
+  --url "$NGROK_DOMAIN" \
+  --traffic-policy-file "$POLICY_FILE" &
+```
+
+### 🧩 docker-compose（ngrok container）
+
+```yaml
+ubuntu:
+  build: ./ubuntu-cli
+  container_name: my-ubuntu-cli
+  depends_on:
+    - n8n
+  environment:
+    - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    - NGROK_DOMAIN=${NGROK_DOMAIN}
+    - POLICY_FILE=${POLICY_FILE}
+  volumes:
+    - ./ubuntu_demo:/root/demo
+    - ./ngrok_config:/root/.config/ngrok
+```
+
+### 🚀 啟動方式
+
+```bash
+docker compose up -d --build
+docker compose logs -f ubuntu
+```
+
+## ✅ 驗證結果
+
+- 開啟 n8n 公開網址：
+  - 先跳 Google SSO
+  - 通過後才進 n8n UI
+- Webhook URL：
+  - 不會被導向 OAuth

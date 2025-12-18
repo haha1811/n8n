@@ -18,7 +18,7 @@ services:
 
       # 外部 URL 相關參數
       - N8N_PORT=5678
-      - N8N_HOST=sparkly-knickknacky-ivory.ngrok-free.dev
+      - N8N_HOST=${NGROK_DOMAIN}
       - N8N_PROTOCOL=https
       - WEBHOOK_URL=https://sparkly-knickknacky-ivory.ngrok-free.dev/
 
@@ -42,6 +42,8 @@ services:
       - n8n
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+      - NGROK_DOMAIN=${NGROK_DOMAIN}
+      - POLICY_FILE=${POLICY_FILE}
     volumes:
       - ./ubuntu_demo:/root/demo
       - ./ngrok_config:/root/.config/ngrok

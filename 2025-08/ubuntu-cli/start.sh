@@ -52,8 +52,15 @@ ngrok config add-authtoken "$NGROK_AUTHTOKEN"
 log "Authtoken saved to /root/.config/ngrok/ngrok.yml"
 
 # 4. 啟動 ngrok tunnel 指向 n8n
-log "Starting ngrok tunnel to $TARGET_URL ..."
-ngrok http "$TARGET_URL" &
+#log "Starting ngrok tunnel to $TARGET_URL ..."
+#ngrok http "$TARGET_URL" &
+
+## 啟動 ngrok 時掛上 policy + 固定 domain
+log "Starting ngrok tunnel to $TARGET_URL with domain $NGROK_DOMAIN ..."
+ngrok http "$TARGET_URL" \
+  --url "$NGROK_DOMAIN" \
+  --traffic-policy-file "$POLICY_FILE" &
+
 
 # （選用）如果未來想顯示 ngrok 產生的 URL，就可以開下面這段
 # sleep 5
