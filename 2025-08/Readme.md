@@ -345,3 +345,30 @@ docker compose logs -f ubuntu
   - 不會被導向 OAuth
 
 ---
+
+## 🔐 n8n Backup Strategy (SQLite Hot Mode)
+
+### Design Goals
+- No service downtime
+- Consistent SQLite snapshot
+- Verified archive integrity
+- Retention control (7 days)
+- No live database file in archive
+
+### Backup Mode
+We use `BACKUP_MODE=hot` with:
+
+- sqlite3 `.backup` for snapshot
+- Exclude live `n8n_data/database.sqlite`
+- Include `database_YYYYMMDD.sqlite` snapshot
+- Archive verification step
+
+### Why not stop mode?
+Stop mode caused:
+- Daily container restart
+- First outbound HTTP timeout after restart
+- Potential workflow instability
+
+Hot mode avoids restart and ensures stability.
+
+---
