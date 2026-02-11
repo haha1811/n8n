@@ -61,6 +61,9 @@ ngrok http "$TARGET_URL" \
   --url "$NGROK_DOMAIN" \
   --traffic-policy-file "$POLICY_FILE" &
 
+#ngrok http "$TARGET_URL" \
+#  --url "$NGROK_DOMAIN" &
+
 
 # （選用）如果未來想顯示 ngrok 產生的 URL，就可以開下面這段
 # sleep 5

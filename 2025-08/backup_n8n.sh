@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# =========================================================
+# n8n local backup script (Pi5 / docker compose)
+# - daily backup
+# - retention days
+# - env-controlled
+# - supports BACKUP_EXTRA_DIRS with spaces
+# - stop mode safety: ALWAYS start n8n back even if backup fails (trap)
+# - auto verify: tar integrity + required paths
+# =========================================================
+
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ===== load env (safe for values with spaces) =====
+if [ -f "$BASE_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$BASE_DIR/.env"
+  set +a
+fi
+
+# ===== defaults =====
+: "${BACKUP_ENABLED:=true}"
+: "${BACKUP_RETENTION_DAYS:=7}"
+: "${BACKUP_BASE_DIR:=./n8n_backup}"
+: "${BACKUP_SOURCE_DIR:=./n8n_data}"
+: "${BACKUP_MODE:=stop}"                 # hot | stop
+: "${BACKUP_EXTRA_DIRS:=}"               # e.g. "./ngrok_config ./docker-compose.yml ./n8n-ui-oauth.yml ./.env"
+: "${BACKUP_LOG_DIR:=./n8n_backup/logs}"
+: "${N8N_SERVICE_NAME:=n8n}"             # compose service name to stop/start
+: "${STOP_TIMEOUT_SECONDS:=30}"          # stop timeout (seconds)
+: "${VERIFY_ENABLED:=true}"              # enable/disable auto verify
+
+# ===== normalize to absolute paths =====
+BACKUP_BASE_DIR_ABS="$BASE_DIR/${BACKUP_BASE_DIR#./}"
+BACKUP_SOURCE_DIR_ABS="$BASE_DIR/${BACKUP_SOURCE_DIR#./}"
+BACKUP_LOG_DIR_ABS="$BASE_DIR/${BACKUP_LOG_DIR#./}"
+
+mkdir -p "$BACKUP_BASE_DIR_ABS" "$BACKUP_LOG_DIR_ABS"
+
+ts="$(date +%Y%m%d_%H%M%S)"
+day="$(date +%Y%m%d)"
+log="$BACKUP_LOG_DIR_ABS/backup_$ts.log"
+
+# Ensure log exists before redirect
+touch "$log"
+exec > >(tee -a "$log" || cat >> "$log") 2>&1
+
+echo "==== n8n backup start: $ts ===="
+echo "BASE_DIR=$BASE_DIR"
+echo "MODE=$BACKUP_MODE"
+echo "ENABLED=$BACKUP_ENABLED"
+echo "RETENTION_DAYS=$BACKUP_RETENTION_DAYS"
+echo "SOURCE=$BACKUP_SOURCE_DIR_ABS"
+echo "DEST=$BACKUP_BASE_DIR_ABS"
+echo "EXTRA_DIRS=${BACKUP_EXTRA_DIRS:-<none>}"
+echo "SERVICE_NAME=$N8N_SERVICE_NAME"
+echo "STOP_TIMEOUT_SECONDS=$STOP_TIMEOUT_SECONDS"
+echo "VERIFY_ENABLED=$VERIFY_ENABLED"
+echo "LOG=$log"
+
+# ===== guard =====
+if [ "${BACKUP_ENABLED,,}" != "true" ]; then
+  echo "[SKIP] BACKUP_ENABLED is not true."
+  exit 0
+fi
+
+if [ ! -d "$BACKUP_SOURCE_DIR_ABS" ]; then
+  echo "[ERROR] BACKUP_SOURCE_DIR not found: $BACKUP_SOURCE_DIR_ABS"
+  exit 1
+fi
+
+# ===== parse extra dirs into array (space-separated) =====
+# IMPORTANT: Keep BACKUP_EXTRA_DIRS quoted in .env
+# Example:
+# BACKUP_EXTRA_DIRS="./ngrok_config ./n8n-ui-oauth.yml ./docker-compose.yml ./.env"
+read -r -a EXTRA_ARR <<< "${BACKUP_EXTRA_DIRS:-}"
+
+# ===== filenames =====
+archive="$BACKUP_BASE_DIR_ABS/backup_n8n_$day.tar.gz"
+sqlite_src="$BACKUP_SOURCE_DIR_ABS/database.sqlite"
+sqlite_dump="$BACKUP_BASE_DIR_ABS/database_$day.sqlite"
+
+# ===== functions =====
+stop_mode() {
+  echo "[INFO] Stopping n8n service for consistent backup..."
+  cd "$BASE_DIR"
+
+  # Try graceful stop with timeout; if still running, force kill
+  docker compose stop -t "$STOP_TIMEOUT_SECONDS" "$N8N_SERVICE_NAME" || true
+
+  if docker compose ps --status running 2>/dev/null | awk '{print $1}' | grep -qE "^${N8N_SERVICE_NAME}\$"; then
+    echo "[WARN] Service still running after stop timeout, forcing kill..."
+    docker compose kill "$N8N_SERVICE_NAME" || true
+  fi
+}
+
+start_mode() {
+  echo "[INFO] Starting n8n service..."
+  cd "$BASE_DIR"
+  # Prefer start; if container not found or compose state odd, fallback to up -d
+  docker compose start "$N8N_SERVICE_NAME" || docker compose up -d "$N8N_SERVICE_NAME" || true
+}
+
+hot_backup_sqlite() {
+  if [ -f "$sqlite_src" ]; then
+    if command -v sqlite3 >/dev/null 2>&1; then
+      echo "[INFO] SQLite hot backup: $sqlite_src -> $sqlite_dump"
+      sqlite3 "$sqlite_src" ".backup '$sqlite_dump'"
+    else
+      echo "[WARN] sqlite3 not found on host."
+      echo "       Recommend: sudo apt-get update && sudo apt-get install -y sqlite3"
+      echo "       Falling back to plain file copy (may be inconsistent under writes)."
+      cp -a "$sqlite_src" "$sqlite_dump"
+    fi
+  else
+    echo "[INFO] No database.sqlite found. Skipping sqlite step."
+  fi
+}
+
+create_archive_stop_mode() {
+  echo "[INFO] Creating archive (stop mode): $archive"
+  tar -czf "$archive" -C "$BASE_DIR" \
+    "${BACKUP_SOURCE_DIR#./}" \
+    "${EXTRA_ARR[@]}"
+}
+
+create_archive_hot_mode() {
+  echo "[INFO] Creating archive (hot mode, excluding live database.sqlite): $archive"
+
+  tar_args=(
+    --exclude="${BACKUP_SOURCE_DIR#./}/database.sqlite"
+    -czf "$archive"
+    -C "$BASE_DIR"
+    "${BACKUP_SOURCE_DIR#./}"
+  )
+
+  if [ "${#EXTRA_ARR[@]}" -gt 0 ]; then
+    tar_args+=( "${EXTRA_ARR[@]}" )
+  fi
+
+  if [ -f "$sqlite_dump" ]; then
+    tar_args+=( -C "$BACKUP_BASE_DIR_ABS" "$(basename "$sqlite_dump")" )
+  fi
+
+  tar "${tar_args[@]}"
+}
+
+verify_archive() {
+  if [ "${VERIFY_ENABLED,,}" != "true" ]; then
+    echo "[SKIP] VERIFY_ENABLED is not true."
+    return 0
+  fi
+
+  echo "[INFO] Verifying archive integrity + listing..."
+  local listing
+  if ! listing="$(tar -tzf "$archive")"; then
+    echo "[ERROR] Archive integrity/listing FAILED: $archive"
+    return 2
+  fi
+  echo "[OK] Archive integrity check passed."
+
+  echo "[INFO] Verifying required paths in archive..."
+
+  # 1) 必須包含 n8n_data/
+  if echo "$listing" | grep -Eq '^(\./)?n8n_data/?$|^(\./)?n8n_data/'; then
+    echo "[OK] Found n8n_data/ in archive."
+  else
+    echo "[ERROR] Missing n8n_data/ in archive!"
+    echo "[HINT] Listing first 80 entries for debugging:"
+    echo "$listing" | head -n 80
+    return 3
+  fi
+
+  # 2) Hot mode + SQLite snapshot：必須包含 database_YYYYMMDD.sqlite
+  #    - 你目前檔名是 database_$day.sqlite，例如 database_20260211.sqlite
+  local expected_sqlite
+  expected_sqlite="database_${day}.sqlite"
+
+  if echo "$listing" | grep -Eq "^(\./)?${expected_sqlite}$"; then
+    echo "[OK] Found ${expected_sqlite} in archive (SQLite snapshot)."
+  else
+    # fallback：允許任何 database_*.sqlite（避免你未來改命名）
+    if echo "$listing" | grep -Eq '^(\./)?database_[0-9]{8}\.sqlite$|^(\./)?database_.*\.sqlite$'; then
+      echo "[OK] Found database_*.sqlite in archive (SQLite snapshot)."
+    else
+      echo "[ERROR] Missing SQLite snapshot in archive!"
+      echo "        Expected: ${expected_sqlite} (or any database_*.sqlite)"
+      echo "[HINT] Find database entries in archive:"
+      echo "$listing" | grep -E 'database_.*\.sqlite|database\.sqlite' | head -n 50 || true
+      return 4
+    fi
+  fi
+
+  # 3) 方案 1：不要求 n8n_data/database.sqlite（你刻意排除 live DB）
+  if echo "$listing" | grep -Eq '^(\./)?n8n_data/database\.sqlite$'; then
+    echo "[INFO] Note: live n8n_data/database.sqlite is present in archive (not required for plan 1)."
+  else
+    echo "[OK] Live n8n_data/database.sqlite is not in archive (expected for plan 1)."
+  fi
+
+  return 0
+}
+
+
+
+# ===== run backup =====
+echo "[INFO] Backup flow begins..."
+
+if [ "${BACKUP_MODE,,}" = "stop" ]; then
+  stop_mode
+
+  # IMPORTANT: Always start n8n back, even if tar/verify fails
+  trap 'echo "[INFO] (trap) Ensuring n8n is started..."; start_mode' EXIT
+
+  create_archive_stop_mode
+  echo "[INFO] Backup created: $archive"
+  ls -lh "$archive" || true
+
+  # Verify (if fails, still will start due to trap)
+  verify_archive
+
+else
+  # hot mode (no downtime) - still supported
+  hot_backup_sqlite
+  create_archive_hot_mode
+  echo "[INFO] Backup created: $archive"
+  ls -lh "$archive" || true
+  verify_archive
+fi
+
+# ===== retention =====
+echo "[INFO] Applying retention: keep last $BACKUP_RETENTION_DAYS days"
+find "$BACKUP_BASE_DIR_ABS" -maxdepth 1 -type f -name "backup_n8n_*.tar.gz" -mtime "+$BACKUP_RETENTION_DAYS" -print -delete || true
+find "$BACKUP_BASE_DIR_ABS" -maxdepth 1 -type f -name "database_*.sqlite" -mtime "+$BACKUP_RETENTION_DAYS" -print -delete || true
+find "$BACKUP_LOG_DIR_ABS" -type f -name "backup_*.log" -mtime "+$BACKUP_RETENTION_DAYS" -print -delete || true
+
+echo "==== n8n backup done: $(date +%Y%m%d_%H%M%S) ===="
+

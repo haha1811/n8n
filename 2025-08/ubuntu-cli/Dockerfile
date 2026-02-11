@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 基本工具 + curl
 RUN apt-get update && \
-    apt-get install -y curl
+    apt-get install -y curl iputils-ping
 
 # 安裝 ngrok（官方建議方式）
 RUN curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \

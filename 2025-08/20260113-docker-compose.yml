@@ -16,16 +16,11 @@ services:
       # Cookie 設定（只有一個就好）
       - N8N_SECURE_COOKIE=true
 
-      # 信任 proxy（ngrok 是反向代理）
-      - N8N_TRUST_PROXY=true
-      - N8N_PROXY_HOPS=1
-
-
       # 外部 URL 相關參數
       - N8N_PORT=5678
       - N8N_HOST=${NGROK_DOMAIN}
       - N8N_PROTOCOL=https
-      - WEBHOOK_URL=https://sparkly-knickknacky-ivory.ngrok-free.dev  # WEBHOOK_URL 建議拿掉尾巴 /
+      - WEBHOOK_URL=https://sparkly-knickknacky-ivory.ngrok-free.dev/
 
       # 👉 讓 n8n 用 Postgres 當主資料庫（可選）
       #- DB_TYPE=postgresdb
@@ -34,13 +29,6 @@ services:
       #- DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       #- DB_POSTGRESDB_USER=${POSTGRES_USER}
       #- DB_POSTGRESDB_PASSWORD=${POSTGRES_PW}
-
-    healthcheck:
-      test: ["CMD-SHELL", "ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
 
     volumes:
       - ./n8n_data:/home/node/.n8n
